@@ -24,6 +24,11 @@ let
           ''
             echo "Writing ${filename}"
 
+            if [ -f "$out/${filename}" ]; then
+              echo "Error: ${filename} already exists"
+              exit 1
+            fi
+
             cat <<'EOF' | ${pkgs.yq-go}/bin/yq -P > $out/${filename}
             ${builtins.toJSON obj}
             EOF
