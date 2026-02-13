@@ -19,7 +19,11 @@ let
         map (
           obj:
           let
-            filename = "${obj.kind}-${builtins.replaceStrings [ "." ] [ "-" ] obj.metadata.name}.yaml";
+            name = builtins.replaceStrings [ "." ] [ "-" ] obj.metadata.name;
+            filename =
+              if (obj.metadata ? namespace) && (obj.metadata.namespace != app.namespace)
+              then "${obj.kind}-${builtins.replaceStrings [ "." ] [ "-" ] obj.metadata.namespace}-${name}.yaml"
+              else "${obj.kind}-${name}.yaml";
           in
           ''
             echo "Writing ${filename}"
