@@ -58,4 +58,48 @@
         ${pkgs.kubectl}/bin/kubectl kustomize "${sanitizedPath}" -o "$out"
       '';
     };
+
+  /*
+    Builds a kustomization and outputs a JSON array of kubernetes objects.
+    Combines kustomize build + YAML→JSON conversion into a single derivation,
+    eliminating the extra fromYAML IFD that would otherwise be needed.
+
+    Type:
+      buildKustomizationJSON :: AttrSet -> [AttrSet]
+  */
+  buildKustomizationJSON =
+    {
+      name,
+      src,
+      path,
+      namespace ? null,
+    }:
+    let
+      sanitizedPath = lib.removePrefix "/" path;
+    in
+    builtins.filter (v: v != null) (
+      builtins.fromJSON (
+        builtins.readFile (
+          pkgs.stdenv.mkDerivation {
+            inherit src;
+            name = "kustomize-json-${name}";
+
+            phases = [
+              "unpackPhase"
+              "patchPhase"
+              "installPhase"
+            ];
+
+            patchPhase = lib.optionalString (!builtins.isNull namespace) ''
+              ${pkgs.yq-go}/bin/yq -i '.namespace = "${namespace}"' "${sanitizedPath}/kustomization.yaml"
+            '';
+
+            installPhase = ''
+              ${pkgs.kubectl}/bin/kubectl kustomize "${sanitizedPath}" \
+              | ${pkgs.yq-go}/bin/yq ea -o=json -M '[.]' > "$out"
+            '';
+          }
+        )
+      )
+    );
 }

@@ -184,11 +184,12 @@ let
       namePrefix ? "",
       attrNameOverrides ? { },
       skipCoerceToList ? { },
+      kindFilter ? [ ],
     }:
     let
       options = pkgs.writeText "${name}-crd2jsonschema-options.json" (
         builtins.toJSON {
-          inherit crds namePrefix attrNameOverrides;
+          inherit crds namePrefix attrNameOverrides kindFilter;
         }
       );
 
@@ -243,28 +244,31 @@ let
     let
       _chart = if chart != null then chart else klib.downloadHelmChart chartAttrs;
 
-      objects = klib.fromHelm {
-        inherit name values extraOpts;
-        includeCRDs = true;
-        chart = _chart;
-      };
-
-      isWanted =
-        obj:
-        obj ? kind
-        && obj.kind == "CustomResourceDefinition"
-        && (crds == [ ] || (lib.any (x: obj.spec.names.kind == x) crds));
-
-      filtered = lib.filter isWanted objects;
-
+      # Single derivation: helm template → write all output.
+      # crd2jsonschema.py already filters for kind == CustomResourceDefinition
+      # and skips null documents, so no yq filtering is needed here.
       src = pkgs.stdenv.mkDerivation {
-        yamlText = pkgs.lib.strings.concatStringsSep "\n---\n" (map builtins.toJSON filtered);
-        passAsFile = "yamlText";
-        name = "toYAMLFile";
-        phases = [ "buildPhase" ];
-        buildPhase = ''
-          mkdir $out
-          ${pkgs.yq-go}/bin/yq -P -M $yamlTextPath > $out/crds.yaml
+        name = "chart-crds-${name}";
+
+        passAsFile = [ "helmValues" ];
+        helmValues = builtins.toJSON values;
+        helmCRDs = "--include-crds";
+        kubeVersion = "v${pkgs.kubernetes.version}";
+
+        phases = [ "installPhase" ];
+        installPhase = ''
+          export HELM_CACHE_HOME="$TMP/.nix-helm-build-cache"
+
+          mkdir -p $out
+
+          ${pkgs.kubernetes-helm}/bin/helm template \
+          $helmCRDs \
+          --kube-version "$kubeVersion" \
+          --values "$helmValuesPath" \
+          "${name}" \
+          "${_chart}" \
+          ${builtins.concatStringsSep " " extraOpts} \
+          > $out/crds.yaml
         '';
       };
     in
@@ -280,6 +284,9 @@ let
       crds = [
         "crds.yaml"
       ];
+
+      # Pass kind names as a filter to crd2jsonschema.py
+      kindFilter = crds;
     };
 in
 {

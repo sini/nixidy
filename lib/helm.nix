@@ -26,6 +26,61 @@
   buildHelmChart = klib.buildHelmChart;
 
   /*
+    Templates a helm chart and outputs a JSON array of kubernetes objects.
+    Combines helm template + YAML→JSON conversion into a single derivation,
+    eliminating the extra fromYAML IFD that would otherwise be needed.
+
+    Type:
+      buildHelmChartJSON :: AttrSet -> [AttrSet]
+  */
+  buildHelmChartJSON =
+    {
+      name,
+      chart,
+      namespace ? null,
+      values ? { },
+      includeCRDs ? true,
+      kubeVersion ? "v${pkgs.kubernetes.version}",
+      apiVersions ? [ ],
+      extraOpts ? [ ],
+    }:
+    let
+      hasNamespace = !builtins.isNull namespace;
+      helmNamespaceFlag = if hasNamespace then "--namespace ${namespace}" else "";
+      namespaceName = if hasNamespace then "-${namespace}" else "";
+    in
+    builtins.filter (v: v != null) (
+      builtins.fromJSON (
+        builtins.readFile (
+          pkgs.stdenv.mkDerivation {
+            name = "helm-json-${chart}${namespaceName}-${name}";
+
+            passAsFile = [ "helmValues" ];
+            helmValues = builtins.toJSON values;
+            helmCRDs = if includeCRDs then "--include-crds" else "";
+            inherit kubeVersion;
+
+            phases = [ "installPhase" ];
+            installPhase = ''
+              export HELM_CACHE_HOME="$TMP/.nix-helm-build-cache"
+
+              ${pkgs.kubernetes-helm}/bin/helm template \
+              $helmCRDs \
+              ${helmNamespaceFlag} \
+              --kube-version "$kubeVersion" \
+              --values "$helmValuesPath" \
+              "${name}" \
+              "${chart}" \
+              ${builtins.concatStringsSep " " extraOpts} \
+              ${builtins.concatStringsSep " " (map (v: "-a ${v}") apiVersions)} \
+              | ${pkgs.yq-go}/bin/yq ea -o=json -M '[.]' > $out
+            '';
+          }
+        )
+      )
+    );
+
+  /*
     Parse the default values file shipped with the helm chart.
 
     Type:

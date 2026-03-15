@@ -63,17 +63,12 @@ in
               config = {
                 objects =
                   with lib;
-                  pipe
-                    {
+                  config.transformer (
+                    kustomize.buildKustomizationJSON {
                       inherit (config) name namespace;
                       inherit (config.kustomization) src path;
                     }
-                    [
-                      kustomize.buildKustomization
-                      builtins.readFile
-                      kube.fromYAML
-                      config.transformer
-                    ];
+                  );
               };
             }
           )

@@ -85,8 +85,8 @@ in
               config = {
                 objects =
                   with lib;
-                  pipe
-                    {
+                  config.transformer (
+                    helm.buildHelmChartJSON {
                       inherit (config)
                         name
                         namespace
@@ -96,12 +96,7 @@ in
                         extraOpts
                         ;
                     }
-                    [
-                      helm.buildHelmChart
-                      builtins.readFile
-                      kube.fromYAML
-                      config.transformer
-                    ];
+                  );
               };
             }
           )
