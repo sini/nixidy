@@ -96,7 +96,7 @@
 
             installPhase = ''
               ${pkgs.kubectl}/bin/kubectl kustomize "${sanitizedPath}" \
-              | ${pkgs.yq-go}/bin/yq ea -o=json -M '[.]' > "$out"
+              | ${pkgs.yq}/bin/yq -Ms '.' > "$out"
             '';
           }
         )

@@ -73,7 +73,7 @@
               "${chart}" \
               ${builtins.concatStringsSep " " extraOpts} \
               ${builtins.concatStringsSep " " (map (v: "-a ${v}") apiVersions)} \
-              | ${pkgs.yq-go}/bin/yq ea -o=json -M '[.]' > $out
+              | ${pkgs.yq}/bin/yq -Ms '.' > $out
             '';
           }
         )
